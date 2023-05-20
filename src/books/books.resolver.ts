@@ -1,16 +1,23 @@
-import { Resolver, Query, Mutation, Args } from '@nestjs/graphql';
+import { Resolver, Query, Mutation, Args, Subscription } from '@nestjs/graphql';
 import { BooksService } from './books.service';
 import { Book } from './entities/book.entity';
 import { CreateBookInput } from './dto/create-book.input';
 import { UpdateBookInput } from './dto/update-book.input';
+import { PubSub } from 'graphql-subscriptions';
 
+const pubSub = new PubSub();
 @Resolver(() => Book)
 export class BooksResolver {
   constructor(private readonly booksService: BooksService) {}
 
   @Mutation(() => Book)
-  createBook(@Args('createBookInput') createBookInput: CreateBookInput) {
-    return this.booksService.create(createBookInput);
+  async createBook(@Args('createBookInput') createBookInput: CreateBookInput) {
+    const newBook = await this.booksService.create(createBookInput);
+
+    await pubSub.publish('bookAdded', {
+      BookAdded: newBook,
+    });
+    return newBook;
   }
 
   @Query(() => [Book], { name: 'books' })
@@ -31,5 +38,10 @@ export class BooksResolver {
   @Mutation(() => Book, { nullable: true })
   removeBook(@Args('id', { type: () => String }) id: string) {
     return this.booksService.remove(id);
+  }
+
+  @Subscription(() => Book)
+  BookAdded() {
+    return pubSub.asyncIterator('bookAdded');
   }
 }
